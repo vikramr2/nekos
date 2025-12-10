@@ -1,7 +1,0 @@
-/Users/vikram/Documents/Code/nekos/nekos/build/temp.macosx-10.9-x86_64-3.9/CMakeFiles/nekos_py.dir
-/Users/vikram/Documents/Code/nekos/nekos/build/temp.macosx-10.9-x86_64-3.9/CMakeFiles/edit_cache.dir
-/Users/vikram/Documents/Code/nekos/nekos/build/temp.macosx-10.9-x86_64-3.9/CMakeFiles/rebuild_cache.dir
-/Users/vikram/Documents/Code/nekos/nekos/build/temp.macosx-10.9-x86_64-3.9/CMakeFiles/list_install_components.dir
-/Users/vikram/Documents/Code/nekos/nekos/build/temp.macosx-10.9-x86_64-3.9/CMakeFiles/install.dir
-/Users/vikram/Documents/Code/nekos/nekos/build/temp.macosx-10.9-x86_64-3.9/CMakeFiles/install/local.dir
-/Users/vikram/Documents/Code/nekos/nekos/build/temp.macosx-10.9-x86_64-3.9/CMakeFiles/install/strip.dir
