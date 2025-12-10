@@ -105,9 +105,9 @@ public:
     // Visualize graph (calls Python visualize module)
     void visualize(const std::string& layout = "force", int iterations = 50,
                    float node_size = 5.0, float edge_width = 1.0,
-                   py::tuple node_color = py::make_tuple(0.3f, 0.7f, 1.0f, 1.0f),
-                   py::tuple edge_color = py::make_tuple(0.5f, 0.5f, 0.5f, 0.3f),
-                   py::tuple background_color = py::make_tuple(0.0f, 0.0f, 0.0f, 1.0f),
+                   py::object node_color = py::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
+                   py::object edge_color = py::make_tuple(0.8f, 0.8f, 0.8f, 1.0f),
+                   py::object background_color = py::make_tuple(0.0f, 0.0f, 0.0f, 1.0f),
                    int num_threads = 1, bool verbose = false) const {
         py::module_ visualize_module = py::module_::import("nekos.visualize");
         py::object visualize_func = visualize_module.attr("visualize");
@@ -194,8 +194,8 @@ PYBIND11_MODULE(_core, m) {
              py::arg("iterations") = 50,
              py::arg("node_size") = 5.0,
              py::arg("edge_width") = 1.0,
-             py::arg("node_color") = py::make_tuple(0.3f, 0.7f, 1.0f, 1.0f),
-             py::arg("edge_color") = py::make_tuple(0.5f, 0.5f, 0.5f, 0.3f),
+             py::arg("node_color") = py::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
+             py::arg("edge_color") = py::make_tuple(0.8f, 0.8f, 0.8f, 1.0f),
              py::arg("background_color") = py::make_tuple(0.0f, 0.0f, 0.0f, 1.0f),
              py::arg("num_threads") = 1,
              py::arg("verbose") = false)

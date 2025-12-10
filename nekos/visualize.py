@@ -3,10 +3,48 @@ Graph visualization using vispy (OpenGL-accelerated)
 """
 import numpy as np
 
-def visualize(graph, layout='force', iterations=50, node_size=5, edge_width=1,
-              node_color=(0.3, 0.7, 1.0, 1.0), edge_color=(0.5, 0.5, 0.5, 0.3),
+def hex_to_rgba(hex_color, alpha=1.0):
+    """
+    Convert hex color string to RGBA tuple
+
+    Parameters
+    ----------
+    hex_color : str
+        Hex color string (e.g., '#RRGGBB' or 'RRGGBB', '#AAA', 'AAA')
+    alpha : float
+        Alpha value (0.0 to 1.0)
+
+    Returns
+    -------
+    tuple
+        RGBA color tuple with values in range [0, 1]
+    """
+    if not alpha:
+        alpha = 1.0
+
+    hex_color = hex_color.lstrip('#')
+    if len(hex_color) == 3:
+        hex_color = ''.join([c*2 for c in hex_color])
+    if len(hex_color) != 6:
+        raise ValueError("Hex color must be in format RRGGBB")
+    r = int(hex_color[0:2], 16) / 255.0
+    g = int(hex_color[2:4], 16) / 255.0
+    b = int(hex_color[4:6], 16) / 255.0
+    return (r, g, b, alpha)
+
+def visualize(graph,
+              layout='force',
+              iterations=50,
+              node_size=5,
+              edge_width=1,
+              node_color=(1.0, 1.0, 1.0, 1.0),
+              edge_color=(0.8, 0.8, 0.8, 1.0),
               background_color=(0.0, 0.0, 0.0, 1.0),
-              num_threads=1, verbose=False):
+              num_threads=1,
+              node_alpha=None,
+              edge_alpha=None,
+              background_alpha=None,
+              verbose=False):
     """
     Visualize graph using vispy (GPU-accelerated with OpenGL)
 
@@ -40,7 +78,16 @@ def visualize(graph, layout='force', iterations=50, node_size=5, edge_width=1,
         raise ImportError(
             "vispy is required for visualization. Install with: pip install vispy"
         )
+    
+    # Check if colors are hex strings and convert to RGBA
+    if isinstance(node_color, str):
+        node_color = hex_to_rgba(node_color, node_alpha if node_alpha is not None else 1.0)
+    if isinstance(edge_color, str):
+        edge_color = hex_to_rgba(edge_color, edge_alpha if edge_alpha is not None else 1.0)
+    if isinstance(background_color, str):
+        background_color = hex_to_rgba(background_color, background_alpha if background_alpha is not None else 1.0)
 
+    # Get number of nodes
     n = graph.num_nodes()
     if n == 0:
         print("Graph is empty, nothing to visualize")
