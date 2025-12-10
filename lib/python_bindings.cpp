@@ -108,7 +108,11 @@ public:
                    py::object node_color = py::make_tuple(1.0f, 1.0f, 1.0f, 1.0f),
                    py::object edge_color = py::make_tuple(0.8f, 0.8f, 0.8f, 1.0f),
                    py::object background_color = py::make_tuple(0.0f, 0.0f, 0.0f, 1.0f),
-                   int num_threads = 1, bool verbose = false) const {
+                   int num_threads = 1,
+                   py::object node_alpha = py::none(),
+                   py::object edge_alpha = py::none(),
+                   py::object background_alpha = py::none(),
+                   bool verbose = false) const {
         py::module_ visualize_module = py::module_::import("nekos.visualize");
         py::object visualize_func = visualize_module.attr("visualize");
 
@@ -122,6 +126,9 @@ public:
                       py::arg("edge_color") = edge_color,
                       py::arg("background_color") = background_color,
                       py::arg("num_threads") = num_threads,
+                      py::arg("node_alpha") = node_alpha,
+                      py::arg("edge_alpha") = edge_alpha,
+                      py::arg("background_alpha") = background_alpha,
                       py::arg("verbose") = verbose);
     }
 };
@@ -198,6 +205,9 @@ PYBIND11_MODULE(_core, m) {
              py::arg("edge_color") = py::make_tuple(0.8f, 0.8f, 0.8f, 1.0f),
              py::arg("background_color") = py::make_tuple(0.0f, 0.0f, 0.0f, 1.0f),
              py::arg("num_threads") = 1,
+             py::arg("node_alpha") = py::none(),
+             py::arg("edge_alpha") = py::none(),
+             py::arg("background_alpha") = py::none(),
              py::arg("verbose") = false)
         .def("__repr__", [](const GraphWrapper& g) {
             return "Graph(nodes=" + std::to_string(g.num_nodes()) +

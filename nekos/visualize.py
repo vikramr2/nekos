@@ -126,17 +126,17 @@ def visualize(graph,
     view.camera = scene.PanZoomCamera(aspect=1)
     view.camera.set_range()
 
-    # Draw edges first (so they appear behind nodes)
-    if edge_pos is not None:
-        line_visual = visuals.Line(pos=edge_pos, color=edge_color,
-                                   width=edge_width, connect='segments',
-                                   method='gl', parent=view.scene)
-
-    # Draw nodes
+    # Draw nodes first
     scatter = visuals.Markers()
     scatter.set_data(pos, edge_color='white', face_color=node_color,
                     size=node_size, edge_width=0)
     view.add(scatter)
+
+    # Draw edges last (so they appear on top of nodes)
+    if edge_pos is not None:
+        line_visual = visuals.Line(pos=edge_pos, color=edge_color,
+                                   width=edge_width, connect='segments',
+                                   method='gl', parent=view.scene)
 
     # Start the application
     app.run()
