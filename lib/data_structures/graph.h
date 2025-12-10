@@ -20,14 +20,19 @@ struct Graph {
 
     std::vector<uint32_t> row_ptr;  // Offsets for each node's edge list
     std::vector<uint32_t> col_idx;  // Target nodes
-    
+
     // Node ID mapping (if needed)
     std::unordered_map<uint64_t, uint32_t> node_map;
     std::vector<uint64_t> id_map;
-    
+
     // Graph info
     size_t num_nodes = 0;
     size_t num_edges = 0; // This counts each undirected edge once
+
+    // Constructor
+    Graph() {
+        row_ptr.push_back(0);  // Initialize with starting offset
+    }
 
     // Add an edge to the graph
     void add_edge(uint32_t from, uint32_t to) {
