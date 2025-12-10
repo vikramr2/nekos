@@ -2,6 +2,7 @@
 build/*
 __pycache__/
 tests/
+data/
 
 # Prerequisites
 *.d
