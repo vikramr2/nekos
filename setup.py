@@ -65,6 +65,7 @@ setup(
         'networkx': ['networkx>=2.0'],
         'networkit': ['networkit>=10.0'],
         'igraph': ['igraph>=0.10.0'],
-        'all': ['networkx>=2.0', 'networkit>=10.0', 'igraph>=0.10.0'],
+        'viz': ['vispy>=0.9.0', 'numpy>=1.19.0'],
+        'all': ['networkx>=2.0', 'networkit>=10.0', 'igraph>=0.10.0', 'vispy>=0.9.0', 'numpy>=1.19.0'],
     },
 )

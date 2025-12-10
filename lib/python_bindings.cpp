@@ -4,6 +4,7 @@
 #include <vector>
 #include "data_structures/graph.h"
 #include "io/graph_io.h"
+#include "algorithm/layout.h"
 
 namespace py = pybind11;
 
@@ -78,6 +79,51 @@ public:
     void save_tsv(const std::string& filename, bool verbose = false) const {
         save_graph_edgelist(filename, g, verbose);
     }
+
+    // Compute graph layout (returns list of (x, y) tuples)
+    py::list compute_layout(const std::string& layout = "force", int iterations = 50,
+                           int num_threads = 1, unsigned int seed = 42,
+                           bool verbose = false) const {
+        std::vector<Point2D> positions;
+
+        if (layout == "force") {
+            positions = force_directed_layout(g, iterations, -1.0f, num_threads, seed, verbose);
+        } else if (layout == "random") {
+            positions = random_layout(g, seed);
+        } else {
+            throw std::invalid_argument("Unknown layout: " + layout);
+        }
+
+        // Convert to Python list of tuples
+        py::list result;
+        for (const auto& pos : positions) {
+            result.append(py::make_tuple(pos.x, pos.y));
+        }
+        return result;
+    }
+
+    // Visualize graph (calls Python visualize module)
+    void visualize(const std::string& layout = "force", int iterations = 50,
+                   float node_size = 5.0, float edge_width = 1.0,
+                   py::tuple node_color = py::make_tuple(0.3f, 0.7f, 1.0f, 1.0f),
+                   py::tuple edge_color = py::make_tuple(0.5f, 0.5f, 0.5f, 0.3f),
+                   py::tuple background_color = py::make_tuple(0.0f, 0.0f, 0.0f, 1.0f),
+                   int num_threads = 1, bool verbose = false) const {
+        py::module_ visualize_module = py::module_::import("nekos.visualize");
+        py::object visualize_func = visualize_module.attr("visualize");
+
+        // Convert this GraphWrapper to a Python object and call visualize
+        py::object graph_obj = py::cast(this);
+        visualize_func(graph_obj, py::arg("layout") = layout,
+                      py::arg("iterations") = iterations,
+                      py::arg("node_size") = node_size,
+                      py::arg("edge_width") = edge_width,
+                      py::arg("node_color") = node_color,
+                      py::arg("edge_color") = edge_color,
+                      py::arg("background_color") = background_color,
+                      py::arg("num_threads") = num_threads,
+                      py::arg("verbose") = verbose);
+    }
 };
 
 // Load graph from TSV
@@ -135,6 +181,24 @@ PYBIND11_MODULE(_core, m) {
         .def("save_tsv", &GraphWrapper::save_tsv,
              "Save graph to TSV file",
              py::arg("filename"), py::arg("verbose") = false)
+        .def("compute_layout", &GraphWrapper::compute_layout,
+             "Compute graph layout and return node positions as list of (x, y) tuples",
+             py::arg("layout") = "force",
+             py::arg("iterations") = 50,
+             py::arg("num_threads") = 1,
+             py::arg("seed") = 42,
+             py::arg("verbose") = false)
+        .def("visualize", &GraphWrapper::visualize,
+             "Visualize graph using vispy (OpenGL-accelerated)",
+             py::arg("layout") = "force",
+             py::arg("iterations") = 50,
+             py::arg("node_size") = 5.0,
+             py::arg("edge_width") = 1.0,
+             py::arg("node_color") = py::make_tuple(0.3f, 0.7f, 1.0f, 1.0f),
+             py::arg("edge_color") = py::make_tuple(0.5f, 0.5f, 0.5f, 0.3f),
+             py::arg("background_color") = py::make_tuple(0.0f, 0.0f, 0.0f, 1.0f),
+             py::arg("num_threads") = 1,
+             py::arg("verbose") = false)
         .def("__repr__", [](const GraphWrapper& g) {
             return "Graph(nodes=" + std::to_string(g.num_nodes()) +
                    ", edges=" + std::to_string(g.num_edges()) + ")";
