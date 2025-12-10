@@ -146,9 +146,9 @@ std::vector<Point2D> force_directed_layout(
                 gx = std::max(0, std::min(grid_size - 1, gx));
                 gy = std::max(0, std::min(grid_size - 1, gy));
 
-                // Check neighboring cells (5x5 neighborhood for better distribution)
-                for (int dy = -2; dy <= 2; dy++) {
-                    for (int dx = -2; dx <= 2; dx++) {
+                // Check neighboring cells (3x3 neighborhood)
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -1; dx <= 1; dx++) {
                         int nx = gx + dx;
                         int ny = gy + dy;
                         if (nx < 0 || nx >= grid_size || ny < 0 || ny >= grid_size) continue;
