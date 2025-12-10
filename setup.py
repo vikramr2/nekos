@@ -55,8 +55,16 @@ setup(
     author='Your Name',
     description='Super-lean library for large-scale graph data',
     long_description='Fast C++ graph data structures and I/O utilities with an emphasis on community search and detection',
-    ext_modules=[CMakeExtension('nekos', sourcedir='.')],
+    packages=['nekos'],
+    ext_modules=[CMakeExtension('nekos.nekos', sourcedir='.')],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     python_requires='>=3.7',
+    install_requires=[],
+    extras_require={
+        'networkx': ['networkx>=2.0'],
+        'networkit': ['networkit>=10.0'],
+        'igraph': ['igraph>=0.10.0'],
+        'all': ['networkx>=2.0', 'networkit>=10.0', 'igraph>=0.10.0'],
+    },
 )

@@ -88,8 +88,8 @@ GraphWrapper* load_from_tsv(const std::string& filename, int num_threads = 1, bo
 }
 
 // Pybind11 module definition
-PYBIND11_MODULE(nekos, m) {
-    m.doc() = "Graph data structures and I/O utilities";
+PYBIND11_MODULE(_core, m) {
+    m.doc() = "Graph data structures and I/O utilities (C++ core)";
 
     // Check if OpenMP is available and warn if not
     #ifdef NEKOS_HAS_OPENMP

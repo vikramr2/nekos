@@ -57,8 +57,8 @@ if(BUILD_PYTHON_MODULE)
         target_link_libraries(nekos_py PRIVATE OpenMP::OpenMP_CXX)
     endif()
 
-    # Set module name to 'nekos' for Python import
-    set_target_properties(nekos_py PROPERTIES OUTPUT_NAME nekos)
+    # Set module name to '_core' to avoid naming conflicts
+    set_target_properties(nekos_py PROPERTIES OUTPUT_NAME _core)
 
     # Set output directory (use CMAKE_LIBRARY_OUTPUT_DIRECTORY from setup.py if provided)
     if(DEFINED CMAKE_LIBRARY_OUTPUT_DIRECTORY)
