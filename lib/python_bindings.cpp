@@ -80,6 +80,42 @@ public:
         save_graph_edgelist(filename, g, verbose);
     }
 
+    // Extract induced subgraph from a set of nodes (internal IDs)
+    GraphWrapper* subgraph(const std::vector<uint32_t>& nodes) const {
+        // Convert vector to unordered_set
+        std::unordered_set<uint32_t> node_set(nodes.begin(), nodes.end());
+
+        // Extract subgraph using existing function
+        auto sub_ptr = extract_subgraph(g, node_set);
+
+        // Create wrapper and move the graph
+        auto* wrapper = new GraphWrapper();
+        wrapper->g = *sub_ptr;
+
+        return wrapper;
+    }
+
+    // Extract induced subgraph from a set of nodes (using original IDs)
+    GraphWrapper* subgraph_by_original_ids(const std::vector<uint64_t>& original_ids) const {
+        // Convert original IDs to internal IDs
+        std::unordered_set<uint32_t> node_set;
+        for (uint64_t orig_id : original_ids) {
+            auto it = g.node_map.find(orig_id);
+            if (it != g.node_map.end()) {
+                node_set.insert(it->second);
+            }
+        }
+
+        // Extract subgraph using existing function
+        auto sub_ptr = extract_subgraph(g, node_set);
+
+        // Create wrapper and move the graph
+        auto* wrapper = new GraphWrapper();
+        wrapper->g = *sub_ptr;
+
+        return wrapper;
+    }
+
     // Compute graph layout (returns list of (x, y) tuples)
     py::list compute_layout(const std::string& layout = "force", int iterations = 50,
                            int num_threads = 1, unsigned int seed = 42,
@@ -188,6 +224,14 @@ PYBIND11_MODULE(_core, m) {
         .def("save_tsv", &GraphWrapper::save_tsv,
              "Save graph to TSV file",
              py::arg("filename"), py::arg("verbose") = false)
+        .def("subgraph", &GraphWrapper::subgraph,
+             "Extract induced subgraph from a list of internal node IDs",
+             py::arg("nodes"),
+             py::return_value_policy::take_ownership)
+        .def("subgraph_by_original_ids", &GraphWrapper::subgraph_by_original_ids,
+             "Extract induced subgraph from a list of original node IDs",
+             py::arg("original_ids"),
+             py::return_value_policy::take_ownership)
         .def("compute_layout", &GraphWrapper::compute_layout,
              "Compute graph layout and return node positions as list of (x, y) tuples",
              py::arg("layout") = "force",
