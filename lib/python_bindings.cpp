@@ -3,7 +3,9 @@
 #include <string>
 #include <vector>
 #include "data_structures/graph.h"
+#include "data_structures/clustering.h"
 #include "io/graph_io.h"
+#include "io/cluster_io.h"
 #include "algorithm/layout.h"
 
 namespace py = pybind11;
@@ -176,6 +178,85 @@ GraphWrapper* load_from_tsv(const std::string& filename, int num_threads = 1, bo
     return wrapper;
 }
 
+// Python-friendly clustering wrapper
+class ClusteringWrapper {
+public:
+    Clustering c;
+    const Graph* graph_ptr;  // Store pointer to graph for original ID lookups
+
+    ClusteringWrapper() : c(), graph_ptr(nullptr) {}
+
+    // Get cluster ID for a node (using internal ID)
+    std::string get_node_cluster(uint32_t node_id) const {
+        return c.get_node_cluster(node_id);
+    }
+
+    // Get cluster ID for a node (using original ID)
+    std::string get_node_cluster_by_original_id(uint64_t original_id) const {
+        if (graph_ptr == nullptr) {
+            throw std::runtime_error("Graph not set - cannot lookup by original ID");
+        }
+
+        // Find internal ID from original ID
+        auto it = graph_ptr->node_map.find(original_id);
+        if (it == graph_ptr->node_map.end()) {
+            return "";  // Node not found in graph
+        }
+
+        uint32_t internal_id = it->second;
+        return c.get_node_cluster(internal_id);
+    }
+
+    // Get all nodes in a cluster
+    py::list get_cluster_nodes(const std::string& cluster_id) const {
+        const auto& nodes = c.get_cluster_nodes(cluster_id);
+        py::list result;
+        for (uint32_t node : nodes) {
+            result.append(node);
+        }
+        return result;
+    }
+
+    // Get all cluster IDs
+    py::list get_cluster_ids() const {
+        py::list result;
+        for (const auto& id : c.cluster_ids) {
+            result.append(id);
+        }
+        return result;
+    }
+
+    // Check if cluster exists
+    bool has_cluster(const std::string& cluster_id) const {
+        return c.has_cluster(cluster_id);
+    }
+
+    // Get number of non-empty clusters
+    size_t get_non_empty_cluster_count() const {
+        return c.get_non_empty_cluster_count();
+    }
+
+    // Get number of clustered nodes
+    size_t get_clustered_node_count() const {
+        return c.get_clustered_node_count();
+    }
+
+    // Verify clustering validity
+    bool verify(bool verbose = false) const {
+        return c.verify(verbose);
+    }
+};
+
+// Load clustering from TSV
+ClusteringWrapper* load_clustering_from_tsv(const std::string& filename,
+                                            const GraphWrapper& graph,
+                                            bool verbose = false) {
+    auto* wrapper = new ClusteringWrapper();
+    wrapper->c = load_clustering(filename, graph.g, verbose);
+    wrapper->graph_ptr = &graph.g;  // Store graph pointer for original ID lookups
+    return wrapper;
+}
+
 // Pybind11 module definition
 PYBIND11_MODULE(_core, m) {
     m.doc() = "Graph data structures and I/O utilities (C++ core)";
@@ -263,6 +344,43 @@ PYBIND11_MODULE(_core, m) {
           "Load graph from TSV file",
           py::arg("filename"),
           py::arg("num_threads") = 1,
+          py::arg("verbose") = false,
+          py::return_value_policy::take_ownership);
+
+    // Clustering class
+    py::class_<ClusteringWrapper>(m, "Clustering")
+        .def(py::init<>(), "Create an empty clustering")
+        .def("get_node_cluster", &ClusteringWrapper::get_node_cluster,
+             "Get cluster ID for a node (using internal node ID)",
+             py::arg("node_id"))
+        .def("get_node_cluster_by_original_id", &ClusteringWrapper::get_node_cluster_by_original_id,
+             "Get cluster ID for a node (using original node ID)",
+             py::arg("original_id"))
+        .def("get_cluster_nodes", &ClusteringWrapper::get_cluster_nodes,
+             "Get all nodes in a cluster",
+             py::arg("cluster_id"))
+        .def("get_cluster_ids", &ClusteringWrapper::get_cluster_ids,
+             "Get list of all cluster IDs")
+        .def("has_cluster", &ClusteringWrapper::has_cluster,
+             "Check if a cluster exists",
+             py::arg("cluster_id"))
+        .def("get_non_empty_cluster_count", &ClusteringWrapper::get_non_empty_cluster_count,
+             "Get number of non-empty clusters")
+        .def("get_clustered_node_count", &ClusteringWrapper::get_clustered_node_count,
+             "Get number of nodes that have been assigned to clusters")
+        .def("verify", &ClusteringWrapper::verify,
+             "Verify clustering validity",
+             py::arg("verbose") = false)
+        .def("__repr__", [](const ClusteringWrapper& c) {
+            return "Clustering(clusters=" + std::to_string(c.get_non_empty_cluster_count()) +
+                   ", clustered_nodes=" + std::to_string(c.get_clustered_node_count()) + ")";
+        });
+
+    // Clustering I/O functions
+    m.def("load_clustering_from_tsv", &load_clustering_from_tsv,
+          "Load clustering from TSV file (requires graph for node mapping)",
+          py::arg("filename"),
+          py::arg("graph"),
           py::arg("verbose") = false,
           py::return_value_policy::take_ownership);
 }

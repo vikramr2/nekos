@@ -9,6 +9,8 @@ from . import _core
 Graph = _core.Graph
 from_tsv = _core.from_tsv
 has_openmp = _core.has_openmp
+Clustering = _core.Clustering
+load_clustering_from_tsv = _core.load_clustering_from_tsv
 
 # Import conversion utilities
 from .convert import (
@@ -26,6 +28,8 @@ __all__ = [
     'Graph',
     'from_tsv',
     'has_openmp',
+    'Clustering',
+    'load_clustering_from_tsv',
     'from_networkx',
     'to_networkx',
     'from_networkit',
