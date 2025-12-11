@@ -171,10 +171,20 @@ public:
     }
 };
 
-// Load graph from TSV
-GraphWrapper* load_from_tsv(const std::string& filename, int num_threads = 1, bool verbose = false) {
+// Load graph from CSV/TSV
+GraphWrapper* load_from_csv(const std::string& filename, int num_threads = 1, bool verbose = false,
+                            py::object header = py::int_(0), char delimiter = ',') {
+    // Convert pandas-style header parameter to skip_header boolean
+    bool skip_header = false;
+    if (!header.is_none()) {
+        if (py::isinstance<py::int_>(header)) {
+            int header_val = header.cast<int>();
+            skip_header = (header_val == 0);  // header=0 means skip first line
+        }
+    }
+
     auto* wrapper = new GraphWrapper();
-    wrapper->g = load_undirected_tsv_edgelist_parallel(filename, num_threads, verbose);
+    wrapper->g = load_undirected_tsv_edgelist_parallel(filename, num_threads, verbose, skip_header, delimiter);
     return wrapper;
 }
 
@@ -247,12 +257,23 @@ public:
     }
 };
 
-// Load clustering from TSV
-ClusteringWrapper* load_clustering_from_tsv(const std::string& filename,
+// Load clustering from CSV/TSV
+ClusteringWrapper* load_clustering_from_csv(const std::string& filename,
                                             const GraphWrapper& graph,
-                                            bool verbose = false) {
+                                            bool verbose = false,
+                                            py::object header = py::int_(0),
+                                            char delimiter = ',') {
+    // Convert pandas-style header parameter to skip_header boolean
+    bool skip_header = false;
+    if (!header.is_none()) {
+        if (py::isinstance<py::int_>(header)) {
+            int header_val = header.cast<int>();
+            skip_header = (header_val == 0);  // header=0 means skip first line
+        }
+    }
+
     auto* wrapper = new ClusteringWrapper();
-    wrapper->c = load_clustering(filename, graph.g, verbose);
+    wrapper->c = load_clustering(filename, graph.g, verbose, skip_header, delimiter);
     wrapper->graph_ptr = &graph.g;  // Store graph pointer for original ID lookups
     return wrapper;
 }
@@ -340,11 +361,13 @@ PYBIND11_MODULE(_core, m) {
         });
 
     // Module functions
-    m.def("from_tsv", &load_from_tsv,
-          "Load graph from TSV file",
+    m.def("from_csv", &load_from_csv,
+          "Load graph from CSV/TSV file",
           py::arg("filename"),
           py::arg("num_threads") = 1,
           py::arg("verbose") = false,
+          py::arg("header") = 0,
+          py::arg("delimiter") = ',',
           py::return_value_policy::take_ownership);
 
     // Clustering class
@@ -377,10 +400,12 @@ PYBIND11_MODULE(_core, m) {
         });
 
     // Clustering I/O functions
-    m.def("load_clustering_from_tsv", &load_clustering_from_tsv,
-          "Load clustering from TSV file (requires graph for node mapping)",
+    m.def("load_clustering_from_csv", &load_clustering_from_csv,
+          "Load clustering from CSV/TSV file (requires graph for node mapping)",
           py::arg("filename"),
           py::arg("graph"),
           py::arg("verbose") = false,
+          py::arg("header") = 0,
+          py::arg("delimiter") = ',',
           py::return_value_policy::take_ownership);
 }

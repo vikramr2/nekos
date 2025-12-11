@@ -16,20 +16,34 @@
 
 #include "mapped_file.h"
 
-// Load clustering from a TSV file (single-threaded, efficient)
-Clustering load_clustering(const std::string& filename, const Graph& graph, 
-                           bool verbose = false) {
+// Load clustering from a TSV/CSV file (single-threaded, efficient)
+Clustering load_clustering(const std::string& filename, const Graph& graph,
+                           bool verbose = false, bool skip_header = false, char delimiter = '\t') {
     Clustering clustering;
     clustering.reset(graph.num_nodes);
-    
+
     MappedFile file;
     if (!file.open(filename)) {
         std::cerr << "Failed to open clustering file: " << filename << std::endl;
         return clustering;
     }
-    
+
     const char* data = file.data();
     size_t file_size = file.size();
+    const char* ptr = data;
+
+    // Skip header line if requested
+    if (skip_header && file_size > 0) {
+        while (ptr < data + file_size && *ptr != '\n') {
+            ptr++;
+        }
+        if (ptr < data + file_size) {
+            ptr++;  // Skip the newline
+        }
+        if (verbose) {
+            std::cout << "Skipping header line (" << (ptr - data) << " bytes)" << std::endl;
+        }
+    }
     
     if (verbose) {
         std::cout << "Loading clustering from: " << filename << std::endl;
@@ -37,11 +51,10 @@ Clustering load_clustering(const std::string& filename, const Graph& graph,
     }
     
     auto start_time = std::chrono::steady_clock::now();
-    
+
     // Step 1: Parse file and collect cluster assignments
     std::unordered_map<std::string, std::unordered_set<uint64_t>> all_cluster_nodes;
-    
-    const char* ptr = data;
+
     const char* end = data + file_size;
     size_t lines_processed = 0;
     
@@ -84,25 +97,25 @@ Clustering load_clustering(const std::string& filename, const Graph& graph,
             continue;
         }
         
-        // Must have a tab after node ID
-        if (ptr >= end || *ptr != '\t') {
+        // Must have delimiter after node ID
+        if (ptr >= end || *ptr != delimiter) {
             // Malformed line, skip it
             while (ptr < end && *ptr != '\n') ptr++;
             if (ptr < end) ptr++;
             continue;
         }
-        
-        ptr++; // Skip tab
-        
-        // Parse cluster ID as string
+
+        ptr++; // Skip delimiter
+
+        // Parse cluster ID as string (stop at newline, carriage return, or delimiter)
         std::string cluster_id;
         cluster_id.reserve(32); // Reserve space for typical cluster ID
-        while (ptr < end && *ptr != '\n' && *ptr != '\r' && *ptr != '\t') {
+        while (ptr < end && *ptr != '\n' && *ptr != '\r' && *ptr != delimiter) {
             cluster_id.push_back(*ptr);
             ptr++;
         }
-        
-        // Trim trailing whitespace from cluster_id
+
+        // Trim trailing whitespace from cluster_id (including tabs and spaces)
         while (!cluster_id.empty() && (cluster_id.back() == ' ' || cluster_id.back() == '\t')) {
             cluster_id.pop_back();
         }

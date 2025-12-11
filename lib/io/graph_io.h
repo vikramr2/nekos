@@ -22,7 +22,7 @@
 
 #include "mapped_file.h"
 
-Graph load_undirected_tsv_edgelist_parallel(const std::string& filename, int num_threads = std::thread::hardware_concurrency(), bool verbose = false) {
+Graph load_undirected_tsv_edgelist_parallel(const std::string& filename, int num_threads = std::thread::hardware_concurrency(), bool verbose = false, bool skip_header = false, char delimiter = '\t') {
     Graph graph;
     MappedFile file;
 
@@ -36,18 +36,33 @@ Graph load_undirected_tsv_edgelist_parallel(const std::string& filename, int num
     #else
     (void)num_threads;  // Suppress unused parameter warning
     #endif
-    
+
     const char* data = file.data();
     size_t file_size = file.size();
-    
+    size_t data_start = 0;
+
+    // Skip header line if requested
+    if (skip_header && file_size > 0) {
+        while (data_start < file_size && data[data_start] != '\n') {
+            data_start++;
+        }
+        if (data_start < file_size) {
+            data_start++;  // Skip the newline
+        }
+        if (verbose) {
+            std::cout << "Skipping header line (first " << data_start << " bytes)" << std::endl;
+        }
+    }
+
     if (verbose) {
         std::cout << "File size: " << file_size / (1024 * 1024) << " MB" << std::endl;
         std::cout << "Step 1: Parsing file and collecting edges..." << std::endl;
     }
-    
-    // Step 1: Parse file in parallel chunks
+
+    // Step 1: Parse file in parallel chunks (starting after header if skipped)
+    size_t effective_size = file_size - data_start;
     size_t chunk_size = 64 * 1024 * 1024; // 64 MB chunks
-    size_t num_chunks = (file_size + chunk_size - 1) / chunk_size;
+    size_t num_chunks = (effective_size + chunk_size - 1) / chunk_size;
     
     #ifdef NEKOS_HAS_OPENMP
     int actual_threads = num_threads;
@@ -73,11 +88,11 @@ Graph load_undirected_tsv_edgelist_parallel(const std::string& filename, int num
 
         for (size_t chunk_idx = 0; chunk_idx < num_chunks; ++chunk_idx) {
     #endif
-            size_t chunk_begin = chunk_idx * chunk_size;
+            size_t chunk_begin = data_start + (chunk_idx * chunk_size);
             size_t chunk_end = std::min(chunk_begin + chunk_size, file_size);
-            
-            // Adjust chunk_begin to start at beginning of a line (except first chunk)
-            if (chunk_begin > 0) {
+
+            // Adjust chunk_begin to start at beginning of a line (except first chunk after header)
+            if (chunk_begin > data_start) {
                 while (chunk_begin < file_size && data[chunk_begin-1] != '\n') {
                     chunk_begin++;
                 }
@@ -105,10 +120,10 @@ Graph load_undirected_tsv_edgelist_parallel(const std::string& filename, int num
                     src = src * 10 + (*ptr - '0');
                     ptr++;
                 }
-                
-                // Skip tab
-                if (ptr < end && *ptr == '\t') ptr++;
-                
+
+                // Skip delimiter
+                if (ptr < end && *ptr == delimiter) ptr++;
+
                 // Parse target node
                 uint64_t dst = 0;
                 while (ptr < end && *ptr >= '0' && *ptr <= '9') {
