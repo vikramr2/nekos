@@ -10,6 +10,9 @@
 
 namespace py = pybind11;
 
+// Forward declaration
+class ClusteringWrapper;
+
 // Python-friendly graph wrapper
 class GraphWrapper {
 public:
@@ -140,6 +143,13 @@ public:
         return result;
     }
 
+    // Compute clustered layout (defined after ClusteringWrapper)
+    py::list compute_clustered_layout(const ClusteringWrapper& clustering,
+                                       int iterations = 100, float k = -1.0f,
+                                       int num_threads = 1, unsigned int seed = 42,
+                                       bool verbose = false, float cluster_separation = 2.0f,
+                                       float intra_cluster_strength = 1.0f) const;
+
     // Visualize graph (calls Python visualize module)
     void visualize(const std::string& layout = "force", int iterations = 50,
                    float node_size = 5.0, float edge_width = 1.0,
@@ -150,7 +160,11 @@ public:
                    py::object node_alpha = py::none(),
                    py::object edge_alpha = py::none(),
                    py::object background_alpha = py::none(),
-                   bool verbose = false) const {
+                   bool verbose = false,
+                   py::object clustering = py::none(),
+                   float cluster_separation = 2.0f,
+                   float intra_cluster_strength = 1.0f,
+                   bool color_by_cluster = true) const {
         py::module_ visualize_module = py::module_::import("nekos.visualize");
         py::object visualize_func = visualize_module.attr("visualize");
 
@@ -167,7 +181,11 @@ public:
                       py::arg("node_alpha") = node_alpha,
                       py::arg("edge_alpha") = edge_alpha,
                       py::arg("background_alpha") = background_alpha,
-                      py::arg("verbose") = verbose);
+                      py::arg("verbose") = verbose,
+                      py::arg("clustering") = clustering,
+                      py::arg("cluster_separation") = cluster_separation,
+                      py::arg("intra_cluster_strength") = intra_cluster_strength,
+                      py::arg("color_by_cluster") = color_by_cluster);
     }
 };
 
@@ -257,6 +275,23 @@ public:
     }
 };
 
+// Implementation of GraphWrapper::compute_clustered_layout (after ClusteringWrapper is defined)
+py::list GraphWrapper::compute_clustered_layout(const ClusteringWrapper& clustering,
+                                                int iterations, float k,
+                                                int num_threads, unsigned int seed,
+                                                bool verbose, float cluster_separation,
+                                                float intra_cluster_strength) const {
+    auto positions = clustered_force_directed_layout(g, clustering.c, iterations, k,
+                                                     num_threads, seed, verbose,
+                                                     cluster_separation, intra_cluster_strength);
+    // Convert to Python list of tuples
+    py::list result;
+    for (const auto& pos : positions) {
+        result.append(py::make_tuple(pos.x, pos.y));
+    }
+    return result;
+}
+
 // Load clustering from CSV/TSV
 ClusteringWrapper* load_clustering_from_csv(const std::string& filename,
                                             const GraphWrapper& graph,
@@ -341,6 +376,16 @@ PYBIND11_MODULE(_core, m) {
              py::arg("num_threads") = 1,
              py::arg("seed") = 42,
              py::arg("verbose") = false)
+        .def("compute_clustered_layout", &GraphWrapper::compute_clustered_layout,
+             "Compute clustered layout that groups nodes by cluster. Returns node positions as list of (x, y) tuples",
+             py::arg("clustering"),
+             py::arg("iterations") = 100,
+             py::arg("k") = -1.0f,
+             py::arg("num_threads") = 1,
+             py::arg("seed") = 42,
+             py::arg("verbose") = false,
+             py::arg("cluster_separation") = 2.0f,
+             py::arg("intra_cluster_strength") = 1.0f)
         .def("visualize", &GraphWrapper::visualize,
              "Visualize graph using vispy (OpenGL-accelerated)",
              py::arg("layout") = "force",
@@ -354,7 +399,11 @@ PYBIND11_MODULE(_core, m) {
              py::arg("node_alpha") = py::none(),
              py::arg("edge_alpha") = py::none(),
              py::arg("background_alpha") = py::none(),
-             py::arg("verbose") = false)
+             py::arg("verbose") = false,
+             py::arg("clustering") = py::none(),
+             py::arg("cluster_separation") = 2.0f,
+             py::arg("intra_cluster_strength") = 1.0f,
+             py::arg("color_by_cluster") = true)
         .def("__repr__", [](const GraphWrapper& g) {
             return "Graph(nodes=" + std::to_string(g.num_nodes()) +
                    ", edges=" + std::to_string(g.num_edges()) + ")";

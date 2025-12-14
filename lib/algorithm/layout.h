@@ -5,7 +5,10 @@
 #include <cmath>
 #include <random>
 #include <algorithm>
+#include <unordered_map>
+#include <unordered_set>
 #include "../data_structures/graph.h"
+#include "../data_structures/clustering.h"
 
 #ifdef NEKOS_HAS_OPENMP
 #include <omp.h>
@@ -329,6 +332,298 @@ std::vector<Point2D> random_layout(
     std::vector<Point2D> pos(n);
     for (uint32_t i = 0; i < n; i++) {
         pos[i] = Point2D(dist(rng), dist(rng));
+    }
+
+    return pos;
+}
+
+// Clustered force-directed layout
+// Groups nodes from the same cluster together using a two-level force approach:
+// 1. Intra-cluster forces: Strong attraction between nodes in same cluster
+// 2. Inter-cluster forces: Repulsion between different clusters
+std::vector<Point2D> clustered_force_directed_layout(
+    const Graph& graph,
+    const Clustering& clustering,
+    int iterations = 100,
+    float k = -1.0f,
+    int num_threads = 1,
+    unsigned int seed = 42,
+    bool verbose = false,
+    float cluster_separation = 2.0f,
+    float intra_cluster_strength = 1.0f)
+{
+    uint32_t n = graph.num_nodes;
+
+    if (k < 0) {
+        k = std::sqrt(1.0f / n);
+    }
+
+    #ifdef NEKOS_HAS_OPENMP
+    omp_set_num_threads(num_threads);
+    #else
+    (void)num_threads;
+    #endif
+
+    if (verbose) {
+        std::cout << "Running clustered force-directed layout:" << std::endl;
+        std::cout << "  Nodes: " << n << std::endl;
+        std::cout << "  Edges: " << graph.num_edges << std::endl;
+        std::cout << "  Iterations: " << iterations << std::endl;
+        std::cout << "  k: " << k << std::endl;
+        std::cout << "  Cluster separation: " << cluster_separation << std::endl;
+    }
+
+    // Build cluster membership map (internal node ID -> cluster ID)
+    // Store as vector for fast lookup instead of hash map
+    std::vector<std::string> node_to_cluster(n);
+    std::vector<bool> has_cluster(n, false);
+    std::vector<bool> is_singleton(n, false);  // Track if node is in singleton cluster
+    for (uint32_t i = 0; i < n; i++) {
+        std::string cluster_id = clustering.get_node_cluster(i);
+        if (!cluster_id.empty()) {
+            node_to_cluster[i] = cluster_id;
+            has_cluster[i] = true;
+        }
+    }
+
+    // Build map of cluster ID -> set of nodes
+    std::unordered_map<std::string, std::vector<uint32_t>> cluster_nodes;
+    for (uint32_t i = 0; i < n; i++) {
+        if (has_cluster[i]) {
+            cluster_nodes[node_to_cluster[i]].push_back(i);
+        }
+    }
+
+    // Mark singleton clusters (only 1 node)
+    for (uint32_t i = 0; i < n; i++) {
+        if (has_cluster[i]) {
+            if (cluster_nodes[node_to_cluster[i]].size() == 1) {
+                is_singleton[i] = true;
+            }
+        }
+    }
+
+    if (verbose) {
+        int singleton_count = 0;
+        for (uint32_t i = 0; i < n; i++) {
+            if (is_singleton[i]) singleton_count++;
+        }
+        std::cout << "  Singleton nodes: " << singleton_count << std::endl;
+        std::cout << "  Multi-node cluster nodes: " << (n - singleton_count) << std::endl;
+    }
+
+    // Initialize positions: place each cluster in a circular arrangement
+    std::vector<Point2D> pos(n);
+    std::mt19937 rng(seed);
+    std::normal_distribution<float> dist(0.0f, 0.1f);
+
+    // Get list of clusters
+    std::vector<std::string> cluster_list;
+    for (const auto& pair : cluster_nodes) {
+        cluster_list.push_back(pair.first);
+    }
+
+    // Place clusters in a circle, then place nodes within each cluster
+    float num_clusters = static_cast<float>(cluster_list.size());
+    for (size_t c = 0; c < cluster_list.size(); c++) {
+        const std::string& cluster_id = cluster_list[c];
+        const auto& nodes = cluster_nodes[cluster_id];
+
+        // Cluster center position (on a circle)
+        float angle = 2.0f * M_PI * c / num_clusters;
+        float radius = cluster_separation * num_clusters / (2.0f * M_PI);
+        Point2D cluster_center(radius * std::cos(angle), radius * std::sin(angle));
+
+        // Place nodes around cluster center with small random offsets
+        for (uint32_t node : nodes) {
+            pos[node] = cluster_center + Point2D(dist(rng), dist(rng));
+        }
+    }
+
+    // Handle unclustered nodes (place them randomly in the center)
+    for (uint32_t i = 0; i < n; i++) {
+        if (!has_cluster[i]) {
+            pos[i] = Point2D(dist(rng), dist(rng));
+        }
+    }
+
+    float t = 0.1f;  // Initial temperature
+    const float dt = t / iterations;
+
+    // Use grid-based approximation for large graphs
+    bool use_grid = (n > 1000);
+    int grid_size = use_grid ? static_cast<int>(std::sqrt(n / 10)) : 0;
+    grid_size = std::max(grid_size, 10);
+
+    // Main iteration loop
+    for (int iter = 0; iter < iterations; iter++) {
+        std::vector<Point2D> disp(n, Point2D(0, 0));
+
+        if (use_grid) {
+            // Grid-based approximation for large graphs
+            // Build spatial grid
+            std::vector<std::vector<std::vector<uint32_t>>> grid(
+                grid_size, std::vector<std::vector<uint32_t>>(grid_size));
+
+            float min_x = pos[0].x, max_x = pos[0].x;
+            float min_y = pos[0].y, max_y = pos[0].y;
+            for (uint32_t i = 0; i < n; i++) {
+                min_x = std::min(min_x, pos[i].x);
+                max_x = std::max(max_x, pos[i].x);
+                min_y = std::min(min_y, pos[i].y);
+                max_y = std::max(max_y, pos[i].y);
+            }
+
+            float width = max_x - min_x + 1e-6f;
+            float height = max_y - min_y + 1e-6f;
+
+            for (uint32_t i = 0; i < n; i++) {
+                int gx = static_cast<int>((pos[i].x - min_x) / width * grid_size);
+                int gy = static_cast<int>((pos[i].y - min_y) / height * grid_size);
+                gx = std::max(0, std::min(grid_size - 1, gx));
+                gy = std::max(0, std::min(grid_size - 1, gy));
+                grid[gx][gy].push_back(i);
+            }
+
+            // Calculate repulsive forces using grid (only check nearby cells)
+            #pragma omp parallel for schedule(dynamic, 64)
+            for (uint32_t i = 0; i < n; i++) {
+                Point2D local_disp(0, 0);
+
+                int gx = static_cast<int>((pos[i].x - min_x) / width * grid_size);
+                int gy = static_cast<int>((pos[i].y - min_y) / height * grid_size);
+                gx = std::max(0, std::min(grid_size - 1, gx));
+                gy = std::max(0, std::min(grid_size - 1, gy));
+
+                // Check 3x3 neighborhood
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        int nx = gx + dx;
+                        int ny = gy + dy;
+                        if (nx < 0 || nx >= grid_size || ny < 0 || ny >= grid_size) continue;
+
+                        for (uint32_t j : grid[nx][ny]) {
+                            if (i == j) continue;
+
+                            Point2D delta = pos[i] - pos[j];
+                            float dist = delta.norm();
+                            if (dist < 1e-6f) {
+                                delta = Point2D(0.01f, 0.01f);
+                                dist = delta.norm();
+                            }
+
+                            // Stronger repulsion between different multi-node clusters
+                            // Don't apply enhanced repulsion if either node is a singleton
+                            float repulsion_strength = 1.0f;
+                            if (has_cluster[i] && has_cluster[j]) {
+                                if (node_to_cluster[i] != node_to_cluster[j]) {
+                                    // Only enhance repulsion if BOTH nodes are in multi-node clusters
+                                    if (!is_singleton[i] && !is_singleton[j]) {
+                                        repulsion_strength = cluster_separation;
+                                    }
+                                }
+                            }
+
+                            float repulsive_force = (k * k) / dist * repulsion_strength;
+                            local_disp = local_disp + delta.normalized() * repulsive_force;
+                        }
+                    }
+                }
+
+                disp[i] = local_disp;
+            }
+        } else {
+            // Exact O(n^2) calculation for small graphs
+            #pragma omp parallel for schedule(dynamic, 64)
+            for (uint32_t i = 0; i < n; i++) {
+                Point2D local_disp(0, 0);
+
+                // Repulsive forces from all other nodes
+                for (uint32_t j = 0; j < n; j++) {
+                    if (i == j) continue;
+
+                    Point2D delta = pos[i] - pos[j];
+                    float dist = delta.norm();
+                    if (dist < 1e-6f) {
+                        delta = Point2D(0.01f, 0.01f);
+                        dist = delta.norm();
+                    }
+
+                    // Stronger repulsion between different multi-node clusters
+                    // Don't apply enhanced repulsion if either node is a singleton
+                    float repulsion_strength = 1.0f;
+                    if (has_cluster[i] && has_cluster[j]) {
+                        if (node_to_cluster[i] != node_to_cluster[j]) {
+                            // Only enhance repulsion if BOTH nodes are in multi-node clusters
+                            if (!is_singleton[i] && !is_singleton[j]) {
+                                repulsion_strength = cluster_separation;
+                            }
+                        }
+                    }
+
+                    float repulsive_force = (k * k) / dist * repulsion_strength;
+                    local_disp = local_disp + delta.normalized() * repulsive_force;
+                }
+
+                disp[i] = local_disp;
+            }
+        }
+
+        // Calculate attractive forces from edges
+        #pragma omp parallel for schedule(dynamic, 64)
+        for (uint32_t u = 0; u < n; u++) {
+            Point2D local_disp(0, 0);
+
+            for (uint32_t idx = graph.row_ptr[u]; idx < graph.row_ptr[u + 1]; idx++) {
+                uint32_t v = graph.col_idx[idx];
+                if (v >= u) continue;  // Each edge processed once
+
+                Point2D delta = pos[v] - pos[u];
+                float dist = delta.norm();
+                if (dist < 1e-6f) continue;
+
+                // Stronger attraction within same cluster (fast vector lookup)
+                float attraction_strength = 1.0f;
+                if (has_cluster[u] && has_cluster[v]) {
+                    if (node_to_cluster[u] == node_to_cluster[v]) {
+                        attraction_strength = intra_cluster_strength;
+                    }
+                }
+
+                float attractive_force = (dist * dist) / k * attraction_strength;
+                Point2D force = delta.normalized() * attractive_force;
+
+                #pragma omp atomic
+                disp[u].x += force.x;
+                #pragma omp atomic
+                disp[u].y += force.y;
+                #pragma omp atomic
+                disp[v].x -= force.x;
+                #pragma omp atomic
+                disp[v].y -= force.y;
+            }
+        }
+
+        // Apply displacements
+        #pragma omp parallel for
+        for (uint32_t i = 0; i < n; i++) {
+            float disp_norm = disp[i].norm();
+            if (disp_norm > 1e-6f) {
+                Point2D displacement = disp[i].normalized() * std::min(disp_norm, t);
+                pos[i] = pos[i] + displacement;
+            }
+        }
+
+        // Cool down
+        t -= dt;
+
+        if (verbose && (iter + 1) % 10 == 0) {
+            std::cout << "  Iteration " << (iter + 1) << "/" << iterations << std::endl;
+        }
+    }
+
+    if (verbose) {
+        std::cout << "Layout complete!" << std::endl;
     }
 
     return pos;
