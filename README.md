@@ -1,4 +1,4 @@
-<img src="assets/nekos.png" alt="nekos" width="200px" align="left">
+<img src="assets/nekos.png" alt="nekos" width="200px" align="left" style="margin-right: 20px;">
 
 # nekos
 
