@@ -4,7 +4,7 @@ Visualization tools for neural graphs - see activations, gradients, and weights
 
 import numpy as np
 from typing import Optional, Dict, Any, Tuple
-import warnings
+# import warnings
 
 
 def visualize_activations(
@@ -321,7 +321,7 @@ def architecture_stats(neural_graph: 'NeuralGraph') -> Dict[str, Any]:
         >>> print(f"Sparsity: {stats['sparsity']:.2%}")
     """
     n_nodes = neural_graph.graph.num_nodes()
-    n_edges = len(neural_graph.weights)
+    n_edges = neural_graph.graph.num_edges()
 
     # Compute maximum possible edges (for feedforward network)
     if neural_graph.layer_order is not None:
@@ -342,8 +342,9 @@ def architecture_stats(neural_graph: 'NeuralGraph') -> Dict[str, Any]:
         for node in range(n_nodes)
     ])
 
-    # Weight statistics
-    weights = np.array(list(neural_graph.weights.values()))
+    # Weight statistics - get from C++ weight matrix
+    weight_matrix = neural_graph.get_weight_matrix()
+    weights = weight_matrix[weight_matrix != 0]  # Non-zero weights only
 
     stats = {
         'n_nodes': n_nodes,

@@ -1,9 +1,11 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <pybind11/numpy.h>
 #include <string>
 #include <vector>
 #include "data_structures/graph.h"
 #include "data_structures/clustering.h"
+#include "data_structures/neural_graph.h"
 #include "io/graph_io.h"
 #include "io/cluster_io.h"
 #include "algorithm/layout.h"
@@ -457,4 +459,152 @@ PYBIND11_MODULE(_core, m) {
           py::arg("header") = 0,
           py::arg("delimiter") = ',',
           py::return_value_policy::take_ownership);
+
+    // NeuralGraph activation function enum
+    py::enum_<NeuralGraph::ActivationFn>(m, "ActivationFn")
+        .value("TANH", NeuralGraph::ActivationFn::TANH)
+        .value("RELU", NeuralGraph::ActivationFn::RELU)
+        .value("SIGMOID", NeuralGraph::ActivationFn::SIGMOID)
+        .value("LINEAR", NeuralGraph::ActivationFn::LINEAR)
+        .export_values();
+
+    // NeuralGraph class
+    py::class_<NeuralGraph>(m, "NeuralGraph")
+        .def(py::init([](const GraphWrapper& graph,
+                        py::list layer_order_list,
+                        py::list node_to_layer_list,
+                        NeuralGraph::ActivationFn activation_fn,
+                        float learning_rate,
+                        int num_threads) {
+            // Convert Python lists to C++ vectors
+            std::vector<std::vector<uint32_t>> layer_order;
+            for (auto layer : layer_order_list) {
+                std::vector<uint32_t> nodes;
+                for (auto node : layer.cast<py::list>()) {
+                    nodes.push_back(node.cast<uint32_t>());
+                }
+                layer_order.push_back(nodes);
+            }
+
+            std::vector<uint32_t> node_to_layer;
+            for (auto layer_id : node_to_layer_list) {
+                node_to_layer.push_back(layer_id.cast<uint32_t>());
+            }
+
+            return new NeuralGraph(&graph.g, layer_order, node_to_layer,
+                                  activation_fn, learning_rate, num_threads);
+        }),
+        "Create a neural graph from graph structure and layer metadata",
+        py::arg("graph"),
+        py::arg("layer_order"),
+        py::arg("node_to_layer"),
+        py::arg("activation_fn") = NeuralGraph::ActivationFn::TANH,
+        py::arg("learning_rate") = 0.01f,
+        py::arg("num_threads") = 1)
+        .def("set_weights", [](NeuralGraph& ng, py::array_t<float> weights_array) {
+            auto buf = weights_array.request();
+            if (buf.ndim != 2) {
+                throw std::runtime_error("Weight matrix must be 2D");
+            }
+            if (buf.shape[0] != ng.n_nodes || buf.shape[1] != ng.n_nodes) {
+                throw std::runtime_error("Weight matrix shape mismatch");
+            }
+            std::vector<float> weights(static_cast<float*>(buf.ptr),
+                                      static_cast<float*>(buf.ptr) + ng.n_nodes * ng.n_nodes);
+            ng.set_weights(weights);
+        },
+        "Set weight matrix from numpy array",
+        py::arg("weights"))
+        .def("set_biases", [](NeuralGraph& ng, py::array_t<float> biases_array) {
+            auto buf = biases_array.request();
+            if (buf.ndim != 1) {
+                throw std::runtime_error("Biases must be 1D");
+            }
+            if (buf.shape[0] != ng.n_nodes) {
+                throw std::runtime_error("Bias vector size mismatch");
+            }
+            std::vector<float> biases(static_cast<float*>(buf.ptr),
+                                     static_cast<float*>(buf.ptr) + ng.n_nodes);
+            ng.set_biases(biases);
+        },
+        "Set biases from numpy array",
+        py::arg("biases"))
+        .def("get_weights", [](const NeuralGraph& ng) {
+            // Return as numpy array
+            auto result = py::array_t<float>({ng.n_nodes, ng.n_nodes});
+            auto buf = result.request();
+            float* ptr = static_cast<float*>(buf.ptr);
+            std::copy(ng.weights.begin(), ng.weights.end(), ptr);
+            return result;
+        },
+        "Get weight matrix as numpy array")
+        .def("get_biases", [](const NeuralGraph& ng) {
+            // Return as numpy array
+            auto result = py::array_t<float>(ng.n_nodes);
+            auto buf = result.request();
+            float* ptr = static_cast<float*>(buf.ptr);
+            std::copy(ng.biases.begin(), ng.biases.end(), ptr);
+            return result;
+        },
+        "Get biases as numpy array")
+        .def("forward", [](NeuralGraph& ng, py::array_t<float> inputs_array) {
+            auto buf = inputs_array.request();
+            if (buf.ndim != 1) {
+                throw std::runtime_error("Inputs must be 1D");
+            }
+            std::vector<float> inputs(static_cast<float*>(buf.ptr),
+                                     static_cast<float*>(buf.ptr) + buf.shape[0]);
+            ng.forward(inputs);
+        },
+        "Forward propagation (sets activations)",
+        py::arg("inputs"))
+        .def("backward", [](NeuralGraph& ng, py::array_t<float> targets_array) {
+            auto buf = targets_array.request();
+            if (buf.ndim != 1) {
+                throw std::runtime_error("Targets must be 1D");
+            }
+            std::vector<float> targets(static_cast<float*>(buf.ptr),
+                                      static_cast<float*>(buf.ptr) + buf.shape[0]);
+            return ng.backward(targets);
+        },
+        "Backward propagation (computes gradients, returns loss)",
+        py::arg("targets"))
+        .def("update_weights", &NeuralGraph::update_weights,
+             "Update weights using computed gradients (SGD)")
+        .def("get_outputs", [](const NeuralGraph& ng) {
+            std::vector<float> outputs = ng.get_outputs();
+            auto result = py::array_t<float>(outputs.size());
+            auto buf = result.request();
+            float* ptr = static_cast<float*>(buf.ptr);
+            std::copy(outputs.begin(), outputs.end(), ptr);
+            return result;
+        },
+        "Get output layer activations as numpy array")
+        .def("get_activations", [](const NeuralGraph& ng) {
+            auto result = py::array_t<float>(ng.n_nodes);
+            auto buf = result.request();
+            float* ptr = static_cast<float*>(buf.ptr);
+            std::copy(ng.activations.begin(), ng.activations.end(), ptr);
+            return result;
+        },
+        "Get all node activations as numpy array")
+        .def("get_gradients", [](const NeuralGraph& ng) {
+            auto result = py::array_t<float>(ng.n_nodes);
+            auto buf = result.request();
+            float* ptr = static_cast<float*>(buf.ptr);
+            std::copy(ng.gradients.begin(), ng.gradients.end(), ptr);
+            return result;
+        },
+        "Get all node gradients as numpy array")
+        .def_readwrite("learning_rate", &NeuralGraph::learning_rate,
+                      "Learning rate for gradient descent")
+        .def_readwrite("num_threads", &NeuralGraph::num_threads,
+                      "Number of OpenMP threads to use")
+        .def_readonly("n_nodes", &NeuralGraph::n_nodes,
+                     "Number of nodes in the network")
+        .def("__repr__", [](const NeuralGraph& ng) {
+            return "NeuralGraph(nodes=" + std::to_string(ng.n_nodes) +
+                   ", layers=" + std::to_string(ng.layer_order.size()) +
+                   ", threads=" + std::to_string(ng.num_threads) + ")";
+        });
 }
