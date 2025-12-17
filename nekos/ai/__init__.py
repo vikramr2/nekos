@@ -11,7 +11,7 @@ This module treats graphs as neural computation substrates where:
 from .neural_graph import NeuralGraph
 from .layers import LayerBuilder
 from .pytorch_bridge import to_pytorch, from_pytorch, train_with_pytorch
-from .visualize import (
+from ..visualize.neural import (
     visualize_activations,
     visualize_gradients,
     visualize_weights,
