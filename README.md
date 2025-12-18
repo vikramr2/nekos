@@ -5,7 +5,7 @@ Super-lean high performance library for large-scale graph data.
 
 ### Name Origin
 
-Network (ネットワーク) + Communities (コミュニティス) = Nekos (ネコス/猫す)
+Network (<ins>**ネ**</ins>ットワーク) + Communities (<ins>**コ**</ins>ミュニティ<ins>**ス**</ins>) = Nekos (ネコス/猫す)
 
 <br clear="left"/>
 
