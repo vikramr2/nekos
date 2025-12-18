@@ -319,10 +319,17 @@ class LayerBuilder:
             src_layer = layers[i]
             dst_layer = layers[i + 1]
 
+            # Strategy: Ensure every src node gets at least one outgoing connection
+            # while also ensuring every dst node gets exactly k incoming connections
+
+            # First pass: Connect each dst to k random src nodes (ensures dst coverage)
             for dst_idx, dst in enumerate(dst_layer):
+                # Scale dst_idx to src_layer range for locality
+                src_start = int((dst_idx / len(dst_layer)) * len(src_layer))
+
                 # Connect to k nearest neighbors in src layer
                 for k in range(k_neighbors):
-                    src_idx = (dst_idx + k) % len(src_layer)
+                    src_idx = (src_start + k) % len(src_layer)
                     src = src_layer[src_idx]
 
                     # Rewire with probability
@@ -330,6 +337,20 @@ class LayerBuilder:
                         src = np.random.choice(src_layer)
 
                     builder.edges.append((src, dst))
+
+            # Second pass: Ensure every src node has at least one connection
+            # Track which src nodes have been used
+            src_used = set()
+            for src, dst in builder.edges:
+                if src in src_layer:
+                    src_used.add(src)
+
+            # Add connections for unused src nodes
+            unused_src = [s for s in src_layer if s not in src_used]
+            for src in unused_src:
+                # Connect to a random dst node
+                dst = np.random.choice(dst_layer)
+                builder.edges.append((src, dst))
 
         return builder.build()
 
