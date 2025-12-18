@@ -166,7 +166,10 @@ public:
                    py::object clustering = py::none(),
                    float cluster_separation = 2.0f,
                    float intra_cluster_strength = 1.0f,
-                   bool color_by_cluster = true) const {
+                   bool color_by_cluster = true,
+                   bool collapsed = false,
+                   float max_node_size = 50.0f,
+                   float max_edge_width = 10.0f) const {
         py::module_ visualize_module = py::module_::import("nekos.visualize");
         py::object visualize_func = visualize_module.attr("visualize");
 
@@ -187,7 +190,10 @@ public:
                       py::arg("clustering") = clustering,
                       py::arg("cluster_separation") = cluster_separation,
                       py::arg("intra_cluster_strength") = intra_cluster_strength,
-                      py::arg("color_by_cluster") = color_by_cluster);
+                      py::arg("color_by_cluster") = color_by_cluster,
+                      py::arg("collapsed") = collapsed,
+                      py::arg("max_node_size") = max_node_size,
+                      py::arg("max_edge_width") = max_edge_width);
     }
 };
 
@@ -405,7 +411,10 @@ PYBIND11_MODULE(_core, m) {
              py::arg("clustering") = py::none(),
              py::arg("cluster_separation") = 2.0f,
              py::arg("intra_cluster_strength") = 1.0f,
-             py::arg("color_by_cluster") = true)
+             py::arg("color_by_cluster") = true,
+             py::arg("collapsed") = false,
+             py::arg("max_node_size") = 50.0f,
+             py::arg("max_edge_width") = 10.0f)
         .def("__repr__", [](const GraphWrapper& g) {
             return "Graph(nodes=" + std::to_string(g.num_nodes()) +
                    ", edges=" + std::to_string(g.num_edges()) + ")";

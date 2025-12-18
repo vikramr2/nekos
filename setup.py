@@ -1,4 +1,4 @@
-from setuptools import setup, Extension
+from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 import sys
 import os
@@ -55,7 +55,7 @@ setup(
     author='Your Name',
     description='Super-lean library for large-scale graph data',
     long_description='Fast C++ graph data structures and I/O utilities with an emphasis on community search and detection',
-    packages=['nekos', 'nekos.ai'],
+    packages=find_packages(),
     ext_modules=[CMakeExtension('nekos.nekos', sourcedir='.')],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
