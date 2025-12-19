@@ -84,7 +84,8 @@ def visualize(graph,
               color_by_cluster=True,
               collapsed=False,
               max_node_size=50,
-              max_edge_width=10):
+              max_edge_width=10,
+              show_nodes=False):
     """
     Visualize graph using vispy (GPU-accelerated with OpenGL)
 
@@ -125,6 +126,9 @@ def visualize(graph,
         Maximum node size in pixels for largest cluster (only used when collapsed=True)
     max_edge_width : float
         Maximum edge width in pixels for edge with most connections (only used when collapsed=True)
+    show_nodes : bool
+        If True, show individual nodes and intra-cluster edges inside translucent clusters
+        (only used when collapsed=True or layout='clustered', default: False)
     """
     try:
         from vispy import app, scene
@@ -232,7 +236,8 @@ def visualize(graph,
                 node_sizes[i] = node_size
 
         # Generate colors for clusters
-        cluster_colors = generate_cluster_colors(cluster_ids, alpha=node_alpha if node_alpha else 1.0)
+        cluster_alpha = 0.3 if show_nodes else (node_alpha if node_alpha else 1.0)
+        cluster_colors = generate_cluster_colors(cluster_ids, alpha=cluster_alpha)
         node_colors = np.array([cluster_colors[cid] for cid in cluster_ids], dtype=np.float32)
 
         # Prepare edge visualization with varying widths
@@ -287,6 +292,78 @@ def visualize(graph,
                                        method='gl', parent=view.scene)
             if verbose:
                 print(f"Drawing {len(inter_cluster_edges)} edges with average width {avg_width:.2f}")
+
+        # If show_nodes is True, draw individual nodes and edges
+        if show_nodes:
+            if verbose:
+                print("Computing individual node positions within clusters...")
+
+            # Compute layout for the full graph
+            full_pos_list = graph.compute_layout(layout='force', iterations=iterations,
+                                                num_threads=num_threads, verbose=verbose)
+            full_pos = np.array(full_pos_list, dtype=np.float32)
+
+            # Create mapping from cluster to its centroid position
+            cluster_centroids = {}
+            for i, cluster_id in enumerate(cluster_ids):
+                cluster_centroids[cluster_id] = pos[i]
+
+            # Adjust node positions to be relative to their cluster centroids
+            n_nodes = graph.num_nodes()
+            adjusted_pos = np.zeros((n_nodes, 2), dtype=np.float32)
+            individual_node_colors = np.zeros((n_nodes, 4), dtype=np.float32)
+
+            # Get full cluster colors with full opacity for individual nodes
+            full_cluster_colors = generate_cluster_colors(cluster_ids, alpha=node_alpha if node_alpha else 1.0)
+
+            for i in range(n_nodes):
+                original_id = graph.get_original_id(i)
+                cluster_id = clustering.get_node_cluster_by_original_id(original_id)
+
+                if cluster_id and cluster_id in cluster_centroids:
+                    # Get all nodes in this cluster to compute their local layout centroid
+                    # Note: get_cluster_nodes returns internal node IDs, not original IDs
+                    cluster_nodes = clustering.get_cluster_nodes(cluster_id)
+                    cluster_node_indices = list(cluster_nodes)
+
+                    # Compute centroid of this cluster in the original layout
+                    if len(cluster_node_indices) > 0:
+                        cluster_local_pos = full_pos[cluster_node_indices]
+                        local_centroid = np.mean(cluster_local_pos, axis=0)
+
+                        # Offset from local centroid, scaled down
+                        offset = (full_pos[i] - local_centroid) * 0.3
+
+                        # Position relative to cluster centroid in collapsed view
+                        adjusted_pos[i] = cluster_centroids[cluster_id] + offset
+                        individual_node_colors[i] = full_cluster_colors[cluster_id]
+                    else:
+                        adjusted_pos[i] = cluster_centroids[cluster_id]
+                        individual_node_colors[i] = full_cluster_colors[cluster_id]
+                else:
+                    # Node not in cluster
+                    adjusted_pos[i] = full_pos[i]
+                    individual_node_colors[i] = (0.5, 0.5, 0.5, node_alpha if node_alpha else 1.0)
+
+            # Draw individual nodes
+            individual_scatter = visuals.Markers()
+            individual_scatter.set_data(adjusted_pos, edge_color='white', face_color=individual_node_colors,
+                                      size=node_size, edge_width=0)
+            view.add(individual_scatter)
+
+            # Draw all edges (both intra and inter-cluster)
+            edges_list = graph.get_edges()
+            if len(edges_list) > 0:
+                individual_edge_pos = np.zeros((len(edges_list) * 2, 2), dtype=np.float32)
+                for i, (u, v) in enumerate(edges_list):
+                    individual_edge_pos[2*i] = adjusted_pos[u]
+                    individual_edge_pos[2*i + 1] = adjusted_pos[v]
+
+                individual_line_visual = visuals.Line(pos=individual_edge_pos, color=edge_color,
+                                                    width=edge_width, connect='segments',
+                                                    method='gl', parent=view.scene)
+                if verbose:
+                    print(f"Drawing {len(edges_list)} individual edges")
 
         # Set camera range after all visuals are added
         view.camera.set_range()
