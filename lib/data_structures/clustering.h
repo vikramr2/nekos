@@ -111,14 +111,19 @@ struct Clustering {
     
     // Assign a node to a cluster
     void assign_node_to_cluster(uint32_t node_id, const std::string& cluster_id) {
+        // Ensure vector is large enough
+        if (node_id >= node_to_cluster_idx.size()) {
+            node_to_cluster_idx.resize(node_id + 1, UINT32_MAX);
+        }
+
         // First, if node already has a cluster, remove it from that cluster
-        if (node_id < node_to_cluster_idx.size() && node_to_cluster_idx[node_id] != UINT32_MAX) {
+        if (node_to_cluster_idx[node_id] != UINT32_MAX) {
             uint32_t old_cluster_idx = node_to_cluster_idx[node_id];
             if (old_cluster_idx < cluster_nodes.size()) {
                 cluster_nodes[old_cluster_idx].erase(node_id);
             }
         }
-        
+
         // Now assign to new cluster
         uint32_t cluster_idx = add_or_get_cluster(cluster_id);
         node_to_cluster_idx[node_id] = cluster_idx;

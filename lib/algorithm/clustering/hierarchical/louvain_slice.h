@@ -7,9 +7,9 @@
 #include <algorithm>
 #include <random>
 #include <cmath>
-#include "../data_structures/graph.h"
-#include "../data_structures/hierarchical_clustering.h"
-#include "leiden.h"  // Reuse Partition structure
+#include "data_structures/graph.h"
+#include "data_structures/hierarchical_clustering.h"
+#include "algorithm/clustering/hierarchical/leiden_slice.h"  // Reuse Partition structure
 
 // Calculate modularity contribution of a node to a community
 inline double calculate_node_modularity_contribution(

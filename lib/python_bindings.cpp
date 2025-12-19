@@ -6,9 +6,15 @@
 #include "data_structures/graph.h"
 #include "data_structures/clustering.h"
 #include "data_structures/neural_graph.h"
+#include "data_structures/hierarchical_clustering.h"
 #include "io/graph_io.h"
 #include "io/cluster_io.h"
+#include "io/hierarchical_io.h"
 #include "algorithm/layout.h"
+#include "algorithm/clustering/hierarchical/paris.h"
+#include "algorithm/clustering/hierarchical/champaign.h"
+#include "algorithm/clustering/hierarchical/leiden_slice.h"
+#include "algorithm/clustering/hierarchical/louvain_slice.h"
 
 namespace py = pybind11;
 
@@ -283,6 +289,121 @@ public:
     }
 };
 
+// Python-friendly hierarchical clustering wrapper
+class HierarchicalClusteringWrapper {
+public:
+    std::vector<DendrogramNode> dendrogram;
+    uint32_t num_nodes;
+    uint32_t num_edges;
+    std::string algorithm;
+    const Graph* graph_ptr;
+
+    HierarchicalClusteringWrapper() : num_nodes(0), num_edges(0), algorithm(""), graph_ptr(nullptr) {}
+
+    HierarchicalClusteringWrapper(const std::vector<DendrogramNode>& d, uint32_t n, uint32_t e,
+                                  const std::string& alg, const Graph* g_ptr)
+        : dendrogram(d), num_nodes(n), num_edges(e), algorithm(alg), graph_ptr(g_ptr) {}
+
+    // Get dendrogram size
+    size_t size() const {
+        return dendrogram.size();
+    }
+
+    // Get dendrogram entry
+    py::dict get_merge(size_t index) const {
+        if (index >= dendrogram.size()) {
+            throw std::out_of_range("Index out of range");
+        }
+        const auto& node = dendrogram[index];
+        py::dict result;
+        result["cluster_a"] = node.cluster_a;
+        result["cluster_b"] = node.cluster_b;
+        result["distance"] = node.distance;
+        result["size"] = node.size;
+        return result;
+    }
+
+    // Get all merges as list of dicts
+    py::list get_all_merges() const {
+        py::list result;
+        for (const auto& node : dendrogram) {
+            py::dict merge;
+            merge["cluster_a"] = node.cluster_a;
+            merge["cluster_b"] = node.cluster_b;
+            merge["distance"] = node.distance;
+            merge["size"] = node.size;
+            result.append(merge);
+        }
+        return result;
+    }
+
+    // Leiden slice - returns ClusteringWrapper
+    ClusteringWrapper* leiden(double gamma = 1.0, uint32_t max_iterations = 10,
+                             uint32_t random_seed = 42, bool verbose = false) const {
+        if (graph_ptr == nullptr) {
+            throw std::runtime_error("Graph not set - cannot compute Leiden slice");
+        }
+
+        Partition partition = leiden_from_dendrogram(
+            *graph_ptr, dendrogram, gamma, max_iterations, random_seed, verbose
+        );
+
+        // Convert partition to ClusteringWrapper
+        auto* clustering = new ClusteringWrapper();
+        clustering->graph_ptr = graph_ptr;
+
+        // Populate clustering from partition
+        for (const auto& [node, comm] : partition.node_to_community) {
+            clustering->c.assign_node_to_cluster(node, std::to_string(comm));
+        }
+
+        return clustering;
+    }
+
+    // Louvain slice - returns ClusteringWrapper
+    ClusteringWrapper* louvain(double resolution = 1.0, uint32_t max_iterations = 10,
+                              uint32_t random_seed = 42, bool verbose = false) const {
+        if (graph_ptr == nullptr) {
+            throw std::runtime_error("Graph not set - cannot compute Louvain slice");
+        }
+
+        Partition partition = louvain_from_dendrogram(
+            *graph_ptr, dendrogram, resolution, max_iterations, random_seed, verbose
+        );
+
+        // Convert partition to ClusteringWrapper
+        auto* clustering = new ClusteringWrapper();
+        clustering->graph_ptr = graph_ptr;
+
+        // Populate clustering from partition
+        for (const auto& [node, comm] : partition.node_to_community) {
+            clustering->c.assign_node_to_cluster(node, std::to_string(comm));
+        }
+
+        return clustering;
+    }
+
+    // Save dendrogram to JSON file
+    void save_json(const std::string& filename) const {
+        save_dendrogram_json(dendrogram, num_nodes, num_edges, filename, algorithm);
+    }
+
+    // Get algorithm name
+    std::string get_algorithm() const {
+        return algorithm;
+    }
+
+    // Get number of nodes
+    uint32_t get_num_nodes() const {
+        return num_nodes;
+    }
+
+    // Get number of edges
+    uint32_t get_num_edges() const {
+        return num_edges;
+    }
+};
+
 // Implementation of GraphWrapper::compute_clustered_layout (after ClusteringWrapper is defined)
 py::list GraphWrapper::compute_clustered_layout(const ClusteringWrapper& clustering,
                                                 int iterations, float k,
@@ -298,6 +419,38 @@ py::list GraphWrapper::compute_clustered_layout(const ClusteringWrapper& cluster
         result.append(py::make_tuple(pos.x, pos.y));
     }
     return result;
+}
+
+// Hierarchical clustering functions
+HierarchicalClusteringWrapper* run_champaign(const GraphWrapper& graph, bool verbose = false) {
+    auto dendrogram = champaign(graph.g, verbose);
+    auto* wrapper = new HierarchicalClusteringWrapper(
+        dendrogram, graph.g.num_nodes, graph.g.num_edges, "Champaign", &graph.g
+    );
+    return wrapper;
+}
+
+HierarchicalClusteringWrapper* run_paris(const GraphWrapper& graph, bool verbose = false) {
+    auto dendrogram = paris(graph.g, verbose);
+    auto* wrapper = new HierarchicalClusteringWrapper(
+        dendrogram, graph.g.num_nodes, graph.g.num_edges, "Paris", &graph.g
+    );
+    return wrapper;
+}
+
+// Load hierarchical clustering from JSON file
+HierarchicalClusteringWrapper* load_hierarchical_from_json(const std::string& filename,
+                                                            const GraphWrapper& graph) {
+    uint32_t num_nodes = 0;
+    uint32_t num_edges = 0;
+    std::string algorithm;
+
+    auto dendrogram = read_dendrogram_json(filename, num_nodes, num_edges, algorithm);
+
+    auto* wrapper = new HierarchicalClusteringWrapper(
+        dendrogram, num_nodes, num_edges, algorithm, &graph.g
+    );
+    return wrapper;
 }
 
 // Load clustering from CSV/TSV
@@ -467,6 +620,64 @@ PYBIND11_MODULE(_core, m) {
           py::arg("verbose") = false,
           py::arg("header") = 0,
           py::arg("delimiter") = ',',
+          py::return_value_policy::take_ownership);
+
+    // HierarchicalClustering class
+    py::class_<HierarchicalClusteringWrapper>(m, "HierarchicalClustering")
+        .def(py::init<>(), "Create an empty hierarchical clustering")
+        .def("size", &HierarchicalClusteringWrapper::size,
+             "Get number of merges in the dendrogram")
+        .def("get_merge", &HierarchicalClusteringWrapper::get_merge,
+             "Get a specific merge from the dendrogram",
+             py::arg("index"))
+        .def("get_all_merges", &HierarchicalClusteringWrapper::get_all_merges,
+             "Get all merges as a list of dicts")
+        .def("leiden", &HierarchicalClusteringWrapper::leiden,
+             "Extract Leiden clustering at a given resolution (gamma)",
+             py::arg("gamma") = 1.0,
+             py::arg("max_iterations") = 10,
+             py::arg("random_seed") = 42,
+             py::arg("verbose") = false,
+             py::return_value_policy::take_ownership)
+        .def("louvain", &HierarchicalClusteringWrapper::louvain,
+             "Extract Louvain clustering at a given resolution",
+             py::arg("resolution") = 1.0,
+             py::arg("max_iterations") = 10,
+             py::arg("random_seed") = 42,
+             py::arg("verbose") = false,
+             py::return_value_policy::take_ownership)
+        .def("save_json", &HierarchicalClusteringWrapper::save_json,
+             "Save dendrogram to JSON file",
+             py::arg("filename"))
+        .def("get_algorithm", &HierarchicalClusteringWrapper::get_algorithm,
+             "Get the algorithm name")
+        .def("get_num_nodes", &HierarchicalClusteringWrapper::get_num_nodes,
+             "Get the number of nodes")
+        .def("get_num_edges", &HierarchicalClusteringWrapper::get_num_edges,
+             "Get the number of edges")
+        .def("__repr__", [](const HierarchicalClusteringWrapper& h) {
+            return "HierarchicalClustering(algorithm=\"" + h.get_algorithm() +
+                   "\", nodes=" + std::to_string(h.get_num_nodes()) +
+                   ", merges=" + std::to_string(h.size()) + ")";
+        });
+
+    // Hierarchical clustering functions
+    m.def("champaign", &run_champaign,
+          "Run Champaign hierarchical clustering algorithm",
+          py::arg("graph"),
+          py::arg("verbose") = false,
+          py::return_value_policy::take_ownership);
+
+    m.def("paris", &run_paris,
+          "Run Paris hierarchical clustering algorithm",
+          py::arg("graph"),
+          py::arg("verbose") = false,
+          py::return_value_policy::take_ownership);
+
+    m.def("load_hierarchical_from_json", &load_hierarchical_from_json,
+          "Load hierarchical clustering from JSON file",
+          py::arg("filename"),
+          py::arg("graph"),
           py::return_value_policy::take_ownership);
 
     // NeuralGraph activation function enum

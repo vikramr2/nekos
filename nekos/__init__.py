@@ -10,6 +10,7 @@ Graph = _core.Graph
 from_csv = _core.from_csv
 has_openmp = _core.has_openmp
 Clustering = _core.Clustering
+HierarchicalClustering = _core.HierarchicalClustering
 load_clustering_from_csv = _core.load_clustering_from_csv
 
 # Backward compatibility aliases
@@ -31,6 +32,9 @@ from .convert import (
     to_igraph
 )
 
+# Import clustering module
+from . import clustering
+
 __version__ = "0.1.0"
 
 __all__ = [
@@ -39,6 +43,7 @@ __all__ = [
     'from_tsv',  # Backward compatibility
     'has_openmp',
     'Clustering',
+    'HierarchicalClustering',
     'load_clustering_from_csv',
     'load_clustering_from_tsv',  # Backward compatibility
     'from_networkx',
@@ -47,4 +52,5 @@ __all__ = [
     'to_networkit',
     'from_igraph',
     'to_igraph',
+    'clustering',
 ]

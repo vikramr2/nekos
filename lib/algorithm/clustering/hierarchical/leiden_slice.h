@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <random>
 #include <cmath>
-#include "../data_structures/graph.h"
-#include "../data_structures/hierarchical_clustering.h"
+#include "data_structures/graph.h"
+#include "data_structures/hierarchical_clustering.h"
 
 // Partition representation
 struct Partition {

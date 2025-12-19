@@ -52,7 +52,7 @@ class CMakeBuild(build_ext):
 setup(
     name='nekos',
     version='0.1.0',
-    author='Your Name',
+    author='Vikram Ramavarapu',
     description='Super-lean library for large-scale graph data',
     long_description='Fast C++ graph data structures and I/O utilities with an emphasis on community search and detection',
     packages=find_packages(),

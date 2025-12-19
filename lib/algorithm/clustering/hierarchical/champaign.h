@@ -4,8 +4,8 @@
 #include <vector>
 #include <limits>
 #include <iostream>
-#include "../data_structures/hierarchical_clustering.h"
-#include "../data_structures/graph.h"
+#include "data_structures/hierarchical_clustering.h"
+#include "data_structures/graph.h"
 
 // CHAMPAIGN algorithm - uses cluster sizes in distance metric
 std::vector<DendrogramNode> champaign(const Graph& g, bool verbose = false) {
