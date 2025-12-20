@@ -15,6 +15,7 @@
 #include "algorithm/clustering/hierarchical/champaign.h"
 #include "algorithm/clustering/hierarchical/leiden_slice.h"
 #include "algorithm/clustering/hierarchical/louvain_slice.h"
+#include "algorithm/connected_components.h"
 
 namespace py = pybind11;
 
@@ -476,6 +477,19 @@ ClusteringWrapper* load_clustering_from_csv(const std::string& filename,
     return wrapper;
 }
 
+// Find connected components and return as clustering
+ClusteringWrapper* find_connected_components_clustering(const GraphWrapper& graph) {
+    // Find connected components
+    auto components = find_connected_components(graph.g);
+
+    // Convert to clustering
+    auto* wrapper = new ClusteringWrapper();
+    wrapper->c = components_to_clustering(components);
+    wrapper->graph_ptr = &graph.g;  // Store graph pointer for original ID lookups
+
+    return wrapper;
+}
+
 // Pybind11 module definition
 PYBIND11_MODULE(_core, m) {
     m.doc() = "Graph data structures and I/O utilities (C++ core)";
@@ -623,6 +637,11 @@ PYBIND11_MODULE(_core, m) {
           py::arg("verbose") = false,
           py::arg("header") = 0,
           py::arg("delimiter") = ',',
+          py::return_value_policy::take_ownership);
+
+    m.def("find_connected_components", &find_connected_components_clustering,
+          "Find connected components in a graph and return as a Clustering object",
+          py::arg("graph"),
           py::return_value_policy::take_ownership);
 
     // HierarchicalClustering class

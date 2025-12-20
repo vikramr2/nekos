@@ -12,6 +12,7 @@ has_openmp = _core.has_openmp
 Clustering = _core.Clustering
 HierarchicalClustering = _core.HierarchicalClustering
 load_clustering_from_csv = _core.load_clustering_from_csv
+find_connected_components = _core.find_connected_components
 
 # Backward compatibility aliases
 from_tsv = lambda filename, num_threads=1, verbose=False, skip_header=False: \
@@ -46,6 +47,7 @@ __all__ = [
     'HierarchicalClustering',
     'load_clustering_from_csv',
     'load_clustering_from_tsv',  # Backward compatibility
+    'find_connected_components',
     'from_networkx',
     'to_networkx',
     'from_networkit',
