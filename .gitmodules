@@ -1,0 +1,3 @@
+[submodule "extlib/VieCut"]
+	path = extlib/VieCut
+	url = https://github.com/vikramr2/VieCut.git
