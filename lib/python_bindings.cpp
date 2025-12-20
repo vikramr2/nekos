@@ -20,15 +20,17 @@
 
 namespace py = pybind11;
 
-// Forward declaration
+// Forward declarations
 class ClusteringWrapper;
+class GraphWrapper;
 
 // Python-friendly mincut result wrapper
 class MincutResultWrapper {
 public:
     MincutResult result;
+    const GraphWrapper* graph_ptr;  // Store pointer to source graph
 
-    MincutResultWrapper(const MincutResult& r) : result(r) {}
+    MincutResultWrapper(const MincutResult& r, const GraphWrapper* g) : result(r), graph_ptr(g) {}
 
     std::vector<uint32_t> get_light_partition() const {
         return result.get_light_partition();
@@ -41,6 +43,9 @@ public:
     uint32_t get_cut_size() const {
         return result.get_cut_size();
     }
+
+    // Convert mincut result to a Clustering object (defined after ClusteringWrapper)
+    ClusteringWrapper* to_clustering() const;
 };
 
 // Python-friendly graph wrapper
@@ -229,7 +234,7 @@ public:
     // Compute minimum cut of the graph
     MincutResultWrapper* mincut() const {
         MincutResult result = compute_mincut(g);
-        return new MincutResultWrapper(result);
+        return new MincutResultWrapper(result, this);
     }
 };
 
@@ -318,6 +323,56 @@ public:
         return c.verify(verbose);
     }
 };
+
+// Implementation of MincutResultWrapper::to_clustering() (must come after ClusteringWrapper definition)
+ClusteringWrapper* MincutResultWrapper::to_clustering() const {
+    auto* clustering_wrapper = new ClusteringWrapper();
+    Clustering& c = clustering_wrapper->c;
+
+    // Set graph pointer for original ID lookups
+    if (graph_ptr != nullptr) {
+        clustering_wrapper->graph_ptr = &(graph_ptr->g);
+    }
+
+    // Get partitions
+    std::vector<uint32_t> light = result.get_light_partition();
+    std::vector<uint32_t> heavy = result.get_heavy_partition();
+
+    // Create two clusters: "0" for light partition, "1" for heavy partition
+    c.cluster_ids = {"0", "1"};
+    c.cluster_id_to_idx["0"] = 0;
+    c.cluster_id_to_idx["1"] = 1;
+
+    // Initialize cluster_nodes vectors
+    c.cluster_nodes.resize(2);
+    c.cluster_missing_nodes.resize(2);
+
+    // Find max node ID to size node_to_cluster_idx
+    uint32_t max_node = 0;
+    for (uint32_t node : light) {
+        if (node > max_node) max_node = node;
+    }
+    for (uint32_t node : heavy) {
+        if (node > max_node) max_node = node;
+    }
+
+    // Initialize node_to_cluster_idx
+    c.node_to_cluster_idx.resize(max_node + 1, UINT32_MAX);
+
+    // Assign light partition to cluster 0
+    for (uint32_t node : light) {
+        c.cluster_nodes[0].insert(node);
+        c.node_to_cluster_idx[node] = 0;
+    }
+
+    // Assign heavy partition to cluster 1
+    for (uint32_t node : heavy) {
+        c.cluster_nodes[1].insert(node);
+        c.node_to_cluster_idx[node] = 1;
+    }
+
+    return clustering_wrapper;
+}
 
 // Python-friendly hierarchical clustering wrapper
 class HierarchicalClusteringWrapper {
@@ -638,6 +693,9 @@ PYBIND11_MODULE(_core, m) {
              "Get the nodes in the heavy (larger) partition of the minimum cut")
         .def("get_cut_size", &MincutResultWrapper::get_cut_size,
              "Get the size (number of edges) of the minimum cut")
+        .def("to_clustering", &MincutResultWrapper::to_clustering,
+             "Convert the minimum cut result to a Clustering object with two clusters (0: light partition, 1: heavy partition)",
+             py::return_value_policy::take_ownership)
         .def("__repr__", [](const MincutResultWrapper& r) {
             return "MincutResult(cut_size=" + std::to_string(r.get_cut_size()) +
                    ", light_partition_size=" + std::to_string(r.get_light_partition().size()) +
