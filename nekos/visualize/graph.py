@@ -276,13 +276,14 @@ def visualize(graph,
         view = canvas.central_widget.add_view()
         view.camera = scene.PanZoomCamera(aspect=1)
 
-        # Draw nodes
+        # Draw cluster nodes FIRST (so they appear in the back as transparent overlays)
         scatter = visuals.Markers()
         scatter.set_data(pos, edge_color='white', face_color=node_colors,
                         size=node_sizes, edge_width=0)
+        scatter.set_gl_state('translucent', blend=True, depth_test=False)
         view.add(scatter)
 
-        # Draw edges - use single Line visual for better performance
+        # Draw inter-cluster edges
         if edge_pos is not None:
             # For now, use a uniform width (average of all widths) for performance
             # Drawing thousands of separate Line visuals is too slow
@@ -291,9 +292,9 @@ def visualize(graph,
                                        width=avg_width, connect='segments',
                                        method='gl', parent=view.scene)
             if verbose:
-                print(f"Drawing {len(inter_cluster_edges)} edges with average width {avg_width:.2f}")
+                print(f"Drawing {len(inter_cluster_edges)} inter-cluster edges with average width {avg_width:.2f}")
 
-        # If show_nodes is True, draw individual nodes and edges
+        # If show_nodes is True, draw individual nodes and edges on top
         if show_nodes:
             if verbose:
                 print("Computing individual node positions within clusters...")
@@ -345,13 +346,14 @@ def visualize(graph,
                     adjusted_pos[i] = full_pos[i]
                     individual_node_colors[i] = (0.5, 0.5, 0.5, node_alpha if node_alpha else 1.0)
 
-            # Draw individual nodes
+            # Draw individual nodes first
             individual_scatter = visuals.Markers()
             individual_scatter.set_data(adjusted_pos, edge_color='white', face_color=individual_node_colors,
                                       size=node_size, edge_width=0)
+            individual_scatter.set_gl_state('translucent')
             view.add(individual_scatter)
 
-            # Draw all edges (both intra and inter-cluster)
+            # Draw all edges (both intra and inter-cluster) on top of individual nodes
             edges_list = graph.get_edges()
             if len(edges_list) > 0:
                 individual_edge_pos = np.zeros((len(edges_list) * 2, 2), dtype=np.float32)
@@ -464,6 +466,8 @@ def visualize(graph,
     scatter = visuals.Markers()
     scatter.set_data(pos, edge_color='white', face_color=node_color,
                     size=node_size, edge_width=0)
+    # Enable alpha blending for transparency
+    scatter.set_gl_state('translucent')
     view.add(scatter)
 
     # Draw edges last (so they appear on top of nodes)
