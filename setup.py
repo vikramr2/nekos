@@ -17,8 +17,41 @@ class CMakeBuild(build_ext):
             raise RuntimeError("CMake must be installed to build the following extensions: " +
                              ", ".join(e.name for e in self.extensions))
 
+        # Initialize git submodules if they haven't been initialized
+        self.initialize_submodules()
+
         for ext in self.extensions:
             self.build_extension(ext)
+
+    def initialize_submodules(self):
+        """Initialize git submodules recursively if not already done."""
+        # Check if we're in a git repository
+        if not os.path.exists('.git'):
+            print("Not in a git repository, skipping submodule initialization")
+            return
+
+        # Check if ALL required submodules are initialized (including nested ones)
+        required_paths = [
+            os.path.join('extlib', 'VieCut', 'lib'),
+            os.path.join('extlib', 'VieCut', 'extlib', 'tlx'),  # Nested submodule
+            os.path.join('extlib', 'VieCut', 'extlib', 'growt'),  # Another nested submodule
+        ]
+
+        all_initialized = all(
+            os.path.exists(path) and os.listdir(path)
+            for path in required_paths
+        )
+
+        if all_initialized:
+            print("Submodules already initialized")
+            return
+
+        print("Initializing git submodules (including nested submodules)...")
+        try:
+            subprocess.check_call(['git', 'submodule', 'update', '--init', '--recursive'])
+            print("Git submodules initialized successfully")
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to initialize git submodules: {e}")
 
     def build_extension(self, ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))

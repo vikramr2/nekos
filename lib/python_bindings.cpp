@@ -7,7 +7,7 @@
 #include "data_structures/clustering.h"
 #include "data_structures/neural_graph.h"
 #include "data_structures/hierarchical_clustering.h"
-#include "io/graph_io.h"
+#include "io/nekos_graph_io.h"
 #include "io/cluster_io.h"
 #include "io/hierarchical_io.h"
 #include "algorithm/layout.h"
@@ -16,11 +16,32 @@
 #include "algorithm/clustering/hierarchical/leiden_slice.h"
 #include "algorithm/clustering/hierarchical/louvain_slice.h"
 #include "algorithm/connected_components.h"
+#include "algorithm/mincut.h"
 
 namespace py = pybind11;
 
 // Forward declaration
 class ClusteringWrapper;
+
+// Python-friendly mincut result wrapper
+class MincutResultWrapper {
+public:
+    MincutResult result;
+
+    MincutResultWrapper(const MincutResult& r) : result(r) {}
+
+    std::vector<uint32_t> get_light_partition() const {
+        return result.get_light_partition();
+    }
+
+    std::vector<uint32_t> get_heavy_partition() const {
+        return result.get_heavy_partition();
+    }
+
+    uint32_t get_cut_size() const {
+        return result.get_cut_size();
+    }
+};
 
 // Python-friendly graph wrapper
 class GraphWrapper {
@@ -203,6 +224,12 @@ public:
                       py::arg("max_node_size") = max_node_size,
                       py::arg("max_edge_width") = max_edge_width,
                       py::arg("show_nodes") = show_nodes);
+    }
+
+    // Compute minimum cut of the graph
+    MincutResultWrapper* mincut() const {
+        MincutResult result = compute_mincut(g);
+        return new MincutResultWrapper(result);
     }
 };
 
@@ -585,6 +612,9 @@ PYBIND11_MODULE(_core, m) {
              py::arg("max_node_size") = 50.0f,
              py::arg("max_edge_width") = 10.0f,
              py::arg("show_nodes") = false)
+        .def("mincut", &GraphWrapper::mincut,
+             "Compute the minimum cut of the graph. Returns a MincutResult object with the cut partitions and size.",
+             py::return_value_policy::take_ownership)
         .def("__repr__", [](const GraphWrapper& g) {
             return "Graph(nodes=" + std::to_string(g.num_nodes()) +
                    ", edges=" + std::to_string(g.num_edges()) + ")";
@@ -599,6 +629,20 @@ PYBIND11_MODULE(_core, m) {
           py::arg("header") = 0,
           py::arg("delimiter") = ',',
           py::return_value_policy::take_ownership);
+
+    // MincutResult class
+    py::class_<MincutResultWrapper>(m, "MincutResult")
+        .def("get_light_partition", &MincutResultWrapper::get_light_partition,
+             "Get the nodes in the light (smaller) partition of the minimum cut")
+        .def("get_heavy_partition", &MincutResultWrapper::get_heavy_partition,
+             "Get the nodes in the heavy (larger) partition of the minimum cut")
+        .def("get_cut_size", &MincutResultWrapper::get_cut_size,
+             "Get the size (number of edges) of the minimum cut")
+        .def("__repr__", [](const MincutResultWrapper& r) {
+            return "MincutResult(cut_size=" + std::to_string(r.get_cut_size()) +
+                   ", light_partition_size=" + std::to_string(r.get_light_partition().size()) +
+                   ", heavy_partition_size=" + std::to_string(r.get_heavy_partition().size()) + ")";
+        });
 
     // Clustering class
     py::class_<ClusteringWrapper>(m, "Clustering")

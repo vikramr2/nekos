@@ -11,6 +11,7 @@ from_csv = _core.from_csv
 has_openmp = _core.has_openmp
 Clustering = _core.Clustering
 HierarchicalClustering = _core.HierarchicalClustering
+MincutResult = _core.MincutResult
 load_clustering_from_csv = _core.load_clustering_from_csv
 find_connected_components = _core.find_connected_components
 
@@ -45,6 +46,7 @@ __all__ = [
     'has_openmp',
     'Clustering',
     'HierarchicalClustering',
+    'MincutResult',
     'load_clustering_from_csv',
     'load_clustering_from_tsv',  # Backward compatibility
     'find_connected_components',

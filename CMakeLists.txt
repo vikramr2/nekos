@@ -24,6 +24,16 @@ find_package(OpenMP)
 # Add the library directory
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib)
 
+# Add root directory to include path (for extlib/VieCut references)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
+# Add VieCut library include paths
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extlib/VieCut/lib)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extlib/VieCut/extlib/tlx)
+
+# Build TLX library (required by VieCut)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/extlib/VieCut/extlib/tlx EXCLUDE_FROM_ALL)
+
 # Set compiler flags for optimization
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
@@ -56,6 +66,9 @@ if(BUILD_PYTHON_MODULE)
     if(OpenMP_CXX_FOUND)
         target_link_libraries(nekos_py PRIVATE OpenMP::OpenMP_CXX)
     endif()
+
+    # Link TLX library (required by VieCut)
+    target_link_libraries(nekos_py PRIVATE tlx)
 
     # Set module name to '_core' to avoid naming conflicts
     set_target_properties(nekos_py PROPERTIES OUTPUT_NAME _core)
